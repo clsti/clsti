@@ -1,0 +1,43 @@
+# Copies About Me, current position and the projects link from the website into README.md once a day.
+# Commits only when the website changed. Run it from the Actions tab to sync right away.
+name: profile
+
+on:
+  schedule:
+    - cron: "47 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  # GitHub pauses scheduled workflows of public repositories after 60 days without activity;
+  # re-enabling them through the API resets that timer.
+  keepalive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - run: |
+          gh api -X PUT repos/${{ github.repository }}/actions/workflows/profile.yml/enable
+          gh api -X PUT repos/${{ github.repository }}/actions/workflows/commit-robots.yml/enable
+
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Read the website
+        run: python tools/sync_profile.py
+      - name: Commit README.md if it changed
+        run: |
+          git diff --quiet README.md && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qm "README: sync from website" README.md
+          git push -q

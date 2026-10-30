@@ -1,0 +1,4 @@
+mujoco>=3.2
+numpy
+scipy
+pillow

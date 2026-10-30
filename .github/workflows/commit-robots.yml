@@ -1,0 +1,116 @@
+# Regenerates the animation from your real contribution calendar once a day and publishes it to the
+# `output` branch of this repository.  Three stages: simulate + plan, render in 4 parallel parts
+# (GitHub's runners have no GPU, MuJoCo renders in software), encode + publish.
+name: commit-robots
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  MUJOCO_GL: osmesa
+  PYOPENGL_PLATFORM: osmesa
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y libosmesa6
+      - run: pip install -r requirements.txt
+      - name: Robot models (Menagerie, Unitree, DEEP Robotics, Fourier, Drake, Robotiq)
+        uses: actions/cache@v4
+        id: models
+        with:
+          path: assets
+          key: models-${{ hashFiles('tools/fetch_models.sh') }}
+      - if: steps.models.outputs.cache-hit != 'true'
+        run: sh tools/fetch_models.sh
+      - name: Simulate the crash, plan the rebuild
+        env:
+          # The default token can read public contributions. Use a PAT with read:user
+          # in a secret (e.g. secrets.CONTRIB_TOKEN) to include private contributions.
+          GITHUB_TOKEN: ${{ secrets.CONTRIB_TOKEN || secrets.GITHUB_TOKEN }}
+        run: python make_anim.py --user "${{ github.repository_owner }}" --out dist --stage plan
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plan
+          path: |
+            dist/physics.pkl
+            dist/sim.pkl
+            dist/textures
+          retention-days: 1
+
+  render:
+    needs: plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    strategy:
+      matrix:
+        part: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y libosmesa6 fonts-dejavu-core
+      - run: pip install -r requirements.txt
+      - name: Robot models (Menagerie, Unitree, DEEP Robotics, Fourier, Drake, Robotiq)
+        uses: actions/cache@v4
+        id: models
+        with:
+          path: assets
+          key: models-${{ hashFiles('tools/fetch_models.sh') }}
+      - if: steps.models.outputs.cache-hit != 'true'
+        run: sh tools/fetch_models.sh
+      - uses: actions/download-artifact@v4
+        with:
+          name: plan
+          path: dist
+      - name: Render frames (part ${{ matrix.part }} of 4)
+        run: python make_anim.py --out dist --reuse --reuse-plan --fast --part ${{ matrix.part }}/4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frames-${{ matrix.part }}
+          path: dist/frames
+          retention-days: 1
+
+  publish:
+    needs: render
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg libosmesa6
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: frames-*
+          path: dist/frames
+          merge-multiple: true
+      - name: Encode GIF / WebP / MP4
+        run: python make_anim.py --out dist --encode-only
+      - name: Publish to the output branch
+        run: |
+          cd dist
+          mkdir publish && mv commit-robots.gif commit-robots.webp commit-robots.mp4 publish/
+          cd publish
+          git init -q -b output
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add . && git commit -qm "commit-robots $(date -u +%F)"
+          git push -qf "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" output

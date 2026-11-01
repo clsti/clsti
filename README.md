@@ -6,7 +6,7 @@
 # Hi, I'm Timo
 
 <!-- website:start: filled in from the website by tools/sync_profile.py, edit the website instead -->
-I’m a Master’s student in Robotics, Cognition and Intelligence at TUM, interested in general-purpose humanoids and legged robots that operate autonomously in unknown environments. In particular, I’m curious how robots can learn on their own by generating their own training data, supervising themselves, and continually improving from experience, while reusing what they learn across environments and tasks.🤖
+I’m a Master’s student in Robotics, Cognition and Intelligence at TUM, interested in general-purpose humanoids and legged robots that operate autonomously in unknown environments. In particular, I’m curious how robots can learn on their own by generating their own training data, supervising themselves, and continually improving from experience, while reusing what they learn across environments and tasks.
 
 **Now:** Research Assistant, [Autonomous Vehicle Systems Lab (TUM)](https://www.mos.ed.tum.de/en/avs/home/)
 
